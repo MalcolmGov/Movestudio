@@ -193,13 +193,13 @@ function ProductCell({ product, kit, currency, W, pad }: {
     }}>
       {/* Image */}
       <div style={{
-        height: '52%',
+        height: '64%',
         background: `linear-gradient(135deg, ${kit.primary}06, ${kit.secondary}10)`,
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         position: 'relative', overflow: 'hidden',
       }}>
         {product.image
-          ? <img src={product.image} alt={product.name} crossOrigin="anonymous" style={{ width: '100%', height: '100%', objectFit: 'contain', padding: 8 }} />
+          ? <img src={product.image} alt={product.name} crossOrigin="anonymous" style={{ width: '100%', height: '100%', objectFit: 'contain', padding: 2 }} />
           : <div style={{ fontSize: Math.round(W * 0.08), opacity: 0.3 }}>📦</div>}
 
         {/* Discount badge (top-right) */}
@@ -224,7 +224,7 @@ function ProductCell({ product, kit, currency, W, pad }: {
       </div>
 
       {/* Text block */}
-      <div style={{ padding: Math.round(pad * 0.55), flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+      <div style={{ padding: Math.round(pad * 0.45), flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', minHeight: 0 }}>
         <div style={{
           fontSize: Math.round(W * 0.026),
           fontWeight: 700,

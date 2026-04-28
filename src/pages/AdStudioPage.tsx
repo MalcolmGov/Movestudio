@@ -10,6 +10,7 @@ import { exportAdAsPng } from '../utils/exportCanvas'
 import { addNotification } from '../utils/notifications'
 import { generateWeeklyBrief, WeeklyBrief } from '../utils/contentBriefEngine'
 import AdCanvas from '../components/AdCanvas'
+import AdSpecialsTab from '../components/AdSpecialsTab'
 
 const FORMATS: AdFormat[] = ['instagram-post', 'instagram-story', 'instagram-reel', 'facebook-ad', 'facebook-reel', 'linkedin-post', 'twitter-x']
 
@@ -143,7 +144,7 @@ export default function AdStudioPage() {
   const [format, setFormat] = useState<AdFormat>('instagram-post')
   const [ad, setAd] = useState<GeneratedAd | null>(null)
   const [loading, setLoading] = useState(false)
-  const [tab, setTab] = useState<'studio' | 'batch' | 'calendar' | 'tips'>('studio')
+  const [tab, setTab] = useState<'studio' | 'batch' | 'calendar' | 'tips' | 'specials'>('studio')
   const [copied, setCopied] = useState(false)
   const [generated, setGenerated] = useState<{ format: AdFormat; ad: GeneratedAd }[]>([])
   const [adColors, setAdColors] = useState({ primary: kit.primary, secondary: kit.secondary, accent: kit.accent })
@@ -312,7 +313,7 @@ export default function AdStudioPage() {
 
       {/* Tabs */}
       <div style={{ display: 'flex', gap: 4, marginBottom: 28, background: 'rgba(255,255,255,0.03)', padding: 4, borderRadius: 10, width: 'fit-content' }}>
-        {[['studio', '⚡ Ad Generator'], ['batch', '📦 Batch Mode'], ['calendar', '📅 Content Calendar'], ['tips', '💡 Prompt Ideas']].map(([key, label]) => (
+        {[['studio', '⚡ Ad Generator'], ['specials', '🏷️ Ad Specials'], ['batch', '📦 Batch Mode'], ['calendar', '📅 Content Calendar'], ['tips', '💡 Prompt Ideas']].map(([key, label]) => (
           <button key={key} onClick={() => setTab(key as any)}
             style={{ padding: '8px 18px', borderRadius: 8, border: 'none', background: tab === key ? 'rgba(255,255,255,0.08)' : 'transparent', color: tab === key ? 'white' : 'var(--text-muted)', fontWeight: tab === key ? 700 : 400, fontSize: 13, cursor: 'pointer', fontFamily: 'var(--font)' }}>
             {label}
@@ -776,6 +777,11 @@ export default function AdStudioPage() {
               </div>
             )}
           </motion.div>
+        )}
+
+        {/* ── AD SPECIALS TAB ── */}
+        {tab === 'specials' && (
+          <AdSpecialsTab kit={{ ...kit, brandName: project?.name?.split('—')[0]?.trim() }} project={project} />
         )}
 
         {/* ── CALENDAR TAB ── */}

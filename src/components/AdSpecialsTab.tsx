@@ -175,15 +175,39 @@ function LibraryView({ kit, projectId, products, onChange, onBack }: {
     createdAt: new Date().toISOString(),
   })
 
-  const fromPreset = (preset: PresetProduct): Product => ({
-    id: `prod-${Date.now()}`,
-    name: preset.name,
-    image: emojiToDataUrl(preset.emoji),
-    oldPrice: 0,
-    newPrice: 0,
-    unit: preset.unit,
-    createdAt: new Date().toISOString(),
-  })
+  /**
+   * Build a Product from a preset. Tries Open Food Facts first for a real
+   * product photo; only falls back to the emoji icon if OFF is offline or
+   * has no matching item with an image. The OFF query is best-effort and
+   * silently fails — preset-clicks always succeed.
+   */
+  const fromPreset = async (preset: PresetProduct): Promise<Product> => {
+    let image: string | null = null
+    try {
+      // Compose a tighter query than just the preset name so OFF returns
+      // matches whose photos actually look like the item (e.g. "white bread loaf"
+      // beats "white bread", which can pull up sandwiches and crumbs).
+      const query = `${preset.name} ${preset.unit}`.replace(/\s+/g, ' ').trim()
+      const hits = await Promise.race([
+        searchProducts(query, 3),
+        new Promise<never>((_, reject) => setTimeout(() => reject(new Error('OFF timeout')), 4000)),
+      ])
+      const firstWithImage = hits.find(h => h.imageUrl)
+      if (firstWithImage?.imageUrl) {
+        image = await imageUrlToDataUrl(firstWithImage.imageUrl)
+      }
+    } catch { /* OFF failed — fall through to emoji */ }
+    if (!image) image = emojiToDataUrl(preset.emoji)
+    return {
+      id: `prod-${Date.now()}`,
+      name: preset.name,
+      image,
+      oldPrice: 0,
+      newPrice: 0,
+      unit: preset.unit,
+      createdAt: new Date().toISOString(),
+    }
+  }
 
   const fromOff = async (off: OffProduct): Promise<Product> => {
     const dataUrl = off.imageUrl ? await imageUrlToDataUrl(off.imageUrl) : null
@@ -264,9 +288,10 @@ function LibraryView({ kit, projectId, products, onChange, onBack }: {
           <CatalogPickerModal
             kit={kit}
             onCancel={() => setCatalogOpen(false)}
-            onPickPreset={(preset) => {
+            onPickPreset={async (preset) => {
               setCatalogOpen(false)
-              setEditing(fromPreset(preset))
+              addNotification('Looking for a real photo…', `Searching the product database for ${preset.name}.`, 'info')
+              setEditing(await fromPreset(preset))
             }}
             onPickOff={async (off) => {
               setCatalogOpen(false)

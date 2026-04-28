@@ -17,6 +17,8 @@ import {
 } from '../utils/adSpecialEngine'
 import { exportPosterAsPdf, exportPosterAsPng } from '../utils/exportPoster'
 import { addNotification } from '../utils/notifications'
+import { emojiToDataUrl } from '../utils/emojiToDataUrl'
+import { PRESET_CATEGORIES, PresetProduct } from '../data/presetProducts'
 import AdSpecialCanvas from './AdSpecialCanvas'
 
 interface Props {
@@ -160,6 +162,7 @@ function LibraryView({ kit, projectId, products, onChange, onBack }: {
   onBack: () => void
 }) {
   const [editing, setEditing] = useState<Product | null>(null)
+  const [catalogOpen, setCatalogOpen] = useState(false)
 
   const blank = (): Product => ({
     id: `prod-${Date.now()}`,
@@ -168,6 +171,16 @@ function LibraryView({ kit, projectId, products, onChange, onBack }: {
     oldPrice: 0,
     newPrice: 0,
     unit: '',
+    createdAt: new Date().toISOString(),
+  })
+
+  const fromPreset = (preset: PresetProduct): Product => ({
+    id: `prod-${Date.now()}`,
+    name: preset.name,
+    image: emojiToDataUrl(preset.emoji),
+    oldPrice: 0,
+    newPrice: 0,
+    unit: preset.unit,
     createdAt: new Date().toISOString(),
   })
 
@@ -193,10 +206,16 @@ function LibraryView({ kit, projectId, products, onChange, onBack }: {
           <h2 style={{ fontSize: 22, fontWeight: 800, color: 'white' }}>📦 Product Library</h2>
           <p style={{ fontSize: 13, color: 'var(--text-muted)', maxWidth: 540 }}>Add products once, reuse them across every weekly special.</p>
         </div>
-        <button onClick={() => setEditing(blank())}
-          style={{ padding: '10px 18px', borderRadius: 10, border: 'none', background: `linear-gradient(135deg, ${kit.primary}, ${kit.secondary})`, color: 'white', fontWeight: 800, fontSize: 13, cursor: 'pointer' }}>
-          + Add Product
-        </button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button onClick={() => setCatalogOpen(true)}
+            style={{ padding: '10px 16px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(255,255,255,0.04)', color: 'white', fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: 'var(--font)' }}>
+            📚 Quick Add from Catalog
+          </button>
+          <button onClick={() => setEditing(blank())}
+            style={{ padding: '10px 18px', borderRadius: 10, border: 'none', background: `linear-gradient(135deg, ${kit.primary}, ${kit.secondary})`, color: 'white', fontWeight: 800, fontSize: 13, cursor: 'pointer' }}>
+            + Add Product
+          </button>
+        </div>
       </div>
 
       {products.length === 0 ? (
@@ -226,8 +245,110 @@ function LibraryView({ kit, projectId, products, onChange, onBack }: {
 
       <AnimatePresence>
         {editing && <ProductEditModal product={editing} onCancel={() => setEditing(null)} onSave={save} kit={kit} />}
+        {catalogOpen && (
+          <CatalogPickerModal
+            kit={kit}
+            onCancel={() => setCatalogOpen(false)}
+            onPick={(preset) => {
+              setCatalogOpen(false)
+              setEditing(fromPreset(preset))
+            }}
+          />
+        )}
       </AnimatePresence>
     </div>
+  )
+}
+
+// ──────────────────────────────────────────────────────────
+// CATALOG PICKER MODAL
+// ──────────────────────────────────────────────────────────
+
+function CatalogPickerModal({ kit, onPick, onCancel }: {
+  kit: BrandKit
+  onPick: (p: PresetProduct) => void
+  onCancel: () => void
+}) {
+  const [activeCat, setActiveCat] = useState(PRESET_CATEGORIES[0].id)
+  const [search, setSearch] = useState('')
+
+  const visible = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    if (!q) {
+      const cat = PRESET_CATEGORIES.find(c => c.id === activeCat)
+      return cat ? cat.items.map(item => ({ item, catLabel: cat.label })) : []
+    }
+    // Search across all categories
+    return PRESET_CATEGORIES.flatMap(cat =>
+      cat.items
+        .filter(i => i.name.toLowerCase().includes(q) || i.unit.toLowerCase().includes(q))
+        .map(item => ({ item, catLabel: cat.label }))
+    )
+  }, [activeCat, search])
+
+  return (
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: 20 }}
+      onClick={onCancel}>
+      <motion.div initial={{ scale: 0.96, y: 10 }} animate={{ scale: 1, y: 0 }} onClick={e => e.stopPropagation()}
+        style={{ width: 720, maxWidth: '100%', height: '80vh', maxHeight: 720, background: '#0f1424', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 14, padding: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+
+        {/* Header */}
+        <div style={{ padding: '20px 24px 16px', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+            <div>
+              <div style={{ fontSize: 18, fontWeight: 800, color: 'white' }}>📚 Product Catalog</div>
+              <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Quick-add common items. You'll set prices on the next screen.</div>
+            </div>
+            <button onClick={onCancel} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: 22, cursor: 'pointer', lineHeight: 1, padding: 4 }}>×</button>
+          </div>
+          <input
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Search across all categories…"
+            style={{ ...inputStyle, marginBottom: 0 }}
+          />
+        </div>
+
+        {/* Category tabs (hidden when searching) */}
+        {!search && (
+          <div style={{ display: 'flex', gap: 4, padding: '12px 16px', overflowX: 'auto', borderBottom: '1px solid rgba(255,255,255,0.06)', flexShrink: 0 }}>
+            {PRESET_CATEGORIES.map(cat => {
+              const active = cat.id === activeCat
+              return (
+                <button key={cat.id} onClick={() => setActiveCat(cat.id)}
+                  style={{ padding: '7px 12px', borderRadius: 8, border: 'none', background: active ? `${kit.primary}25` : 'transparent', color: active ? 'white' : 'var(--text-muted)', fontWeight: active ? 700 : 500, fontSize: 12, cursor: 'pointer', whiteSpace: 'nowrap', fontFamily: 'var(--font)', flexShrink: 0 }}>
+                  <span style={{ marginRight: 4 }}>{cat.icon}</span>{cat.label}
+                </button>
+              )
+            })}
+          </div>
+        )}
+
+        {/* Items grid */}
+        <div style={{ flex: 1, overflowY: 'auto', padding: 16 }}>
+          {visible.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-muted)', fontSize: 13 }}>
+              No matches. Try a different search term, or add it as a custom product.
+            </div>
+          ) : (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 8 }}>
+              {visible.map(({ item, catLabel }, idx) => (
+                <motion.button key={`${item.name}-${item.unit}-${idx}`} whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
+                  onClick={() => onPick(item)}
+                  style={{ padding: 12, borderRadius: 10, border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.02)', cursor: 'pointer', textAlign: 'left', fontFamily: 'var(--font)', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  <div style={{ fontSize: 32, lineHeight: 1, marginBottom: 4 }}>{item.emoji}</div>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: 'white', lineHeight: 1.2 }}>{item.name}</div>
+                  <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>
+                    {item.unit}{search ? ` · ${catLabel}` : ''}
+                  </div>
+                </motion.button>
+              ))}
+            </div>
+          )}
+        </div>
+      </motion.div>
+    </motion.div>
   )
 }
 

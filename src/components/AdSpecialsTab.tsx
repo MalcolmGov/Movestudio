@@ -8,7 +8,7 @@
  *   - 'library'   → manage the project's product catalog
  */
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { BrandKit, Project } from '../types'
 import {
@@ -19,6 +19,7 @@ import { exportPosterAsPdf, exportPosterAsPng } from '../utils/exportPoster'
 import { addNotification } from '../utils/notifications'
 import { emojiToDataUrl } from '../utils/emojiToDataUrl'
 import { PRESET_CATEGORIES, PresetProduct } from '../data/presetProducts'
+import { searchProducts, imageUrlToDataUrl, OffProduct } from '../utils/productSearch'
 import AdSpecialCanvas from './AdSpecialCanvas'
 
 interface Props {
@@ -184,6 +185,20 @@ function LibraryView({ kit, projectId, products, onChange, onBack }: {
     createdAt: new Date().toISOString(),
   })
 
+  const fromOff = async (off: OffProduct): Promise<Product> => {
+    const dataUrl = off.imageUrl ? await imageUrlToDataUrl(off.imageUrl) : null
+    const fullName = off.brand ? `${off.brand} ${off.name}` : off.name
+    return {
+      id: `prod-${Date.now()}`,
+      name: fullName.slice(0, 60),
+      image: dataUrl,
+      oldPrice: 0,
+      newPrice: 0,
+      unit: off.quantity || '',
+      createdAt: new Date().toISOString(),
+    }
+  }
+
   const save = (p: Product) => {
     if (!p.name.trim()) { addNotification('Missing name', 'Give the product a name first.', 'warning'); return }
     if (p.newPrice >= p.oldPrice) { addNotification('Check pricing', 'Special price should be less than the old price.', 'warning'); return }
@@ -249,9 +264,22 @@ function LibraryView({ kit, projectId, products, onChange, onBack }: {
           <CatalogPickerModal
             kit={kit}
             onCancel={() => setCatalogOpen(false)}
-            onPick={(preset) => {
+            onPickPreset={(preset) => {
               setCatalogOpen(false)
               setEditing(fromPreset(preset))
+            }}
+            onPickOff={async (off) => {
+              setCatalogOpen(false)
+              addNotification('Fetching image…', `Loading "${off.name}" from product database.`, 'info')
+              const product = await fromOff(off)
+              if (!product.image) {
+                addNotification('Image unavailable', 'Could not load the product photo. The name has been pre-filled — upload your own image.', 'warning')
+              }
+              setEditing(product)
+            }}
+            onPickCustom={(name) => {
+              setCatalogOpen(false)
+              setEditing({ ...blank(), name })
             }}
           />
         )}
@@ -264,21 +292,47 @@ function LibraryView({ kit, projectId, products, onChange, onBack }: {
 // CATALOG PICKER MODAL
 // ──────────────────────────────────────────────────────────
 
-function CatalogPickerModal({ kit, onPick, onCancel }: {
+function CatalogPickerModal({ kit, onPickPreset, onPickOff, onPickCustom, onCancel }: {
   kit: BrandKit
-  onPick: (p: PresetProduct) => void
+  onPickPreset: (p: PresetProduct) => void
+  onPickOff: (p: OffProduct) => void
+  onPickCustom: (name: string) => void
   onCancel: () => void
 }) {
   const [activeCat, setActiveCat] = useState(PRESET_CATEGORIES[0].id)
   const [search, setSearch] = useState('')
+  const [offResults, setOffResults] = useState<OffProduct[]>([])
+  const [offLoading, setOffLoading] = useState(false)
+  const [offError, setOffError] = useState<string | null>(null)
+  const debounceRef = useRef<number | null>(null)
 
-  const visible = useMemo(() => {
+  // Debounced OFF lookup whenever the search query changes.
+  useEffect(() => {
+    if (debounceRef.current) window.clearTimeout(debounceRef.current)
+    const q = search.trim()
+    if (q.length < 2) { setOffResults([]); setOffError(null); setOffLoading(false); return }
+    setOffLoading(true)
+    setOffError(null)
+    debounceRef.current = window.setTimeout(async () => {
+      try {
+        const list = await searchProducts(q, 12)
+        setOffResults(list)
+      } catch (err) {
+        setOffError('Could not reach the product database. Quick picks below still work.')
+        setOffResults([])
+      } finally {
+        setOffLoading(false)
+      }
+    }, 350)
+    return () => { if (debounceRef.current) window.clearTimeout(debounceRef.current) }
+  }, [search])
+
+  const presetMatches = useMemo(() => {
     const q = search.trim().toLowerCase()
     if (!q) {
       const cat = PRESET_CATEGORIES.find(c => c.id === activeCat)
       return cat ? cat.items.map(item => ({ item, catLabel: cat.label })) : []
     }
-    // Search across all categories
     return PRESET_CATEGORIES.flatMap(cat =>
       cat.items
         .filter(i => i.name.toLowerCase().includes(q) || i.unit.toLowerCase().includes(q))
@@ -286,31 +340,34 @@ function CatalogPickerModal({ kit, onPick, onCancel }: {
     )
   }, [activeCat, search])
 
+  const showingOff = search.trim().length >= 2
+
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
       style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: 20 }}
       onClick={onCancel}>
       <motion.div initial={{ scale: 0.96, y: 10 }} animate={{ scale: 1, y: 0 }} onClick={e => e.stopPropagation()}
-        style={{ width: 720, maxWidth: '100%', height: '80vh', maxHeight: 720, background: '#0f1424', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 14, padding: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        style={{ width: 760, maxWidth: '100%', height: '85vh', maxHeight: 760, background: '#0f1424', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 14, padding: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
 
         {/* Header */}
         <div style={{ padding: '20px 24px 16px', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
             <div>
               <div style={{ fontSize: 18, fontWeight: 800, color: 'white' }}>📚 Product Catalog</div>
-              <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Quick-add common items. You'll set prices on the next screen.</div>
+              <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Search a real product (e.g. "Albany superior sliced") or pick from quick presets below.</div>
             </div>
             <button onClick={onCancel} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: 22, cursor: 'pointer', lineHeight: 1, padding: 4 }}>×</button>
           </div>
           <input
             value={search}
             onChange={e => setSearch(e.target.value)}
-            placeholder="Search across all categories…"
+            placeholder="🔍 Search a real product by name or brand…"
             style={{ ...inputStyle, marginBottom: 0 }}
+            autoFocus
           />
         </div>
 
-        {/* Category tabs (hidden when searching) */}
+        {/* Category tabs (only when not searching) */}
         {!search && (
           <div style={{ display: 'flex', gap: 4, padding: '12px 16px', overflowX: 'auto', borderBottom: '1px solid rgba(255,255,255,0.06)', flexShrink: 0 }}>
             {PRESET_CATEGORIES.map(cat => {
@@ -325,27 +382,90 @@ function CatalogPickerModal({ kit, onPick, onCancel }: {
           </div>
         )}
 
-        {/* Items grid */}
+        {/* Body */}
         <div style={{ flex: 1, overflowY: 'auto', padding: 16 }}>
-          {visible.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-muted)', fontSize: 13 }}>
-              No matches. Try a different search term, or add it as a custom product.
-            </div>
-          ) : (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 8 }}>
-              {visible.map(({ item, catLabel }, idx) => (
-                <motion.button key={`${item.name}-${item.unit}-${idx}`} whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
-                  onClick={() => onPick(item)}
-                  style={{ padding: 12, borderRadius: 10, border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.02)', cursor: 'pointer', textAlign: 'left', fontFamily: 'var(--font)', display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  <div style={{ fontSize: 32, lineHeight: 1, marginBottom: 4 }}>{item.emoji}</div>
-                  <div style={{ fontSize: 12, fontWeight: 700, color: 'white', lineHeight: 1.2 }}>{item.name}</div>
-                  <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>
-                    {item.unit}{search ? ` · ${catLabel}` : ''}
+
+          {/* OFF results section */}
+          {showingOff && (
+            <div style={{ marginBottom: 18 }}>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 700, marginBottom: 10, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span>🛒 Real products</span>
+                {offLoading && <span style={{ color: kit.accent, textTransform: 'none', letterSpacing: 0, fontWeight: 500 }}>· searching…</span>}
+                <span style={{ marginLeft: 'auto', textTransform: 'none', letterSpacing: 0, fontWeight: 400, opacity: 0.6 }}>via Open Food Facts</span>
+              </div>
+              {(offError || (!offLoading && offResults.length === 0)) && (
+                <div style={{ padding: 14, borderRadius: 8, background: 'rgba(255,255,255,0.02)', border: '1px dashed rgba(255,255,255,0.08)', color: 'var(--text-muted)', fontSize: 12, lineHeight: 1.6 }}>
+                  {offError
+                    ? 'Open Food Facts is unreachable right now. '
+                    : 'No matches in the product database. '}
+                  Search the web for a branded photo, then paste the URL when you add the product:
+                  <div style={{ marginTop: 8, display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                    <a
+                      href={`https://www.google.com/search?tbm=isch&q=${encodeURIComponent(search.trim())}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{ padding: '6px 12px', borderRadius: 6, background: `${kit.primary}20`, border: `1px solid ${kit.primary}40`, color: 'white', textDecoration: 'none', fontSize: 12, fontWeight: 700 }}
+                    >
+                      🔍 Open Google Images for "{search.trim()}"
+                    </a>
+                    <button onClick={() => onPickCustom(search.trim())}
+                      style={{ padding: '6px 12px', borderRadius: 6, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', color: 'white', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'var(--font)' }}>
+                      ＋ Add as custom: "{search.trim()}"
+                    </button>
                   </div>
-                </motion.button>
-              ))}
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 6 }}>
+                    From Google Images: right-click an image → "Copy Image Address" → paste in the URL field on the next screen.
+                  </div>
+                </div>
+              )}
+              {offResults.length > 0 && (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 10 }}>
+                  {offResults.map(p => (
+                    <motion.button key={p.id} whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
+                      onClick={() => onPickOff(p)}
+                      style={{ padding: 10, borderRadius: 10, border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.02)', cursor: 'pointer', textAlign: 'left', fontFamily: 'var(--font)', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      <div style={{ aspectRatio: '1 / 1', borderRadius: 6, overflow: 'hidden', background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        {p.imageUrl
+                          ? <img src={p.imageUrl} alt={p.name} loading="lazy" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
+                          : <div style={{ fontSize: 24, opacity: 0.3 }}>📦</div>}
+                      </div>
+                      <div style={{ fontSize: 11, fontWeight: 700, color: 'white', lineHeight: 1.2, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{p.name}</div>
+                      <div style={{ fontSize: 10, color: 'var(--text-muted)', display: 'flex', justifyContent: 'space-between', gap: 4 }}>
+                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.brand || '—'}</span>
+                        {p.quantity && <span style={{ flexShrink: 0 }}>{p.quantity}</span>}
+                      </div>
+                    </motion.button>
+                  ))}
+                </div>
+              )}
             </div>
           )}
+
+          {/* Preset section */}
+          <div>
+            <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 700, marginBottom: 10 }}>
+              {showingOff ? '⚡ Quick picks' : `${PRESET_CATEGORIES.find(c => c.id === activeCat)?.icon} ${PRESET_CATEGORIES.find(c => c.id === activeCat)?.label}`}
+            </div>
+            {presetMatches.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: 24, color: 'var(--text-muted)', fontSize: 13 }}>
+                No quick presets match. The real-product results above are your best bet.
+              </div>
+            ) : (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 8 }}>
+                {presetMatches.map(({ item, catLabel }, idx) => (
+                  <motion.button key={`${item.name}-${item.unit}-${idx}`} whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
+                    onClick={() => onPickPreset(item)}
+                    style={{ padding: 12, borderRadius: 10, border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.02)', cursor: 'pointer', textAlign: 'left', fontFamily: 'var(--font)', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    <div style={{ fontSize: 32, lineHeight: 1, marginBottom: 4 }}>{item.emoji}</div>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: 'white', lineHeight: 1.2 }}>{item.name}</div>
+                    <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>
+                      {item.unit}{search ? ` · ${catLabel}` : ''}
+                    </div>
+                  </motion.button>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       </motion.div>
     </motion.div>
@@ -359,11 +479,30 @@ function ProductEditModal({ product, onSave, onCancel, kit }: {
   kit: BrandKit
 }) {
   const [draft, setDraft] = useState<Product>(product)
+  const [urlValue, setUrlValue] = useState('')
+  const [urlLoading, setUrlLoading] = useState(false)
 
   const onImage = (file: File) => {
     const reader = new FileReader()
     reader.onload = () => setDraft(d => ({ ...d, image: reader.result as string }))
     reader.readAsDataURL(file)
+  }
+
+  const onImageFromUrl = async () => {
+    const url = urlValue.trim()
+    if (!url) return
+    setUrlLoading(true)
+    try {
+      const dataUrl = await imageUrlToDataUrl(url)
+      if (dataUrl) {
+        setDraft(d => ({ ...d, image: dataUrl }))
+        setUrlValue('')
+      } else {
+        addNotification('Could not load image', 'The host blocked the download. Try a different URL or upload the file.', 'warning')
+      }
+    } finally {
+      setUrlLoading(false)
+    }
   }
 
   return (
@@ -395,6 +534,19 @@ function ProductEditModal({ product, onSave, onCancel, kit }: {
         )}
         <Field label="Product image">
           <input type="file" accept="image/*" onChange={e => e.target.files?.[0] && onImage(e.target.files[0])} style={{ ...inputStyle, padding: 8 }} />
+          <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+            <input
+              value={urlValue}
+              onChange={e => setUrlValue(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), onImageFromUrl())}
+              placeholder="…or paste an image URL"
+              style={{ ...inputStyle, marginBottom: 0 }}
+            />
+            <button onClick={onImageFromUrl} disabled={urlLoading || !urlValue.trim()}
+              style={{ padding: '0 14px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(255,255,255,0.04)', color: 'white', fontSize: 12, fontWeight: 600, cursor: urlLoading ? 'wait' : 'pointer', whiteSpace: 'nowrap' }}>
+              {urlLoading ? '⏳' : 'Fetch'}
+            </button>
+          </div>
           {draft.image && <img src={draft.image} alt="preview" style={{ marginTop: 8, maxWidth: 120, maxHeight: 120, borderRadius: 6, background: '#0b1220', objectFit: 'contain' }} />}
         </Field>
 

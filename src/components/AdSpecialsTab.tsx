@@ -558,21 +558,48 @@ function ProductEditModal({ product, onSave, onCancel, kit }: {
           </div>
         )}
         <Field label="Product image">
-          <input type="file" accept="image/*" onChange={e => e.target.files?.[0] && onImage(e.target.files[0])} style={{ ...inputStyle, padding: 8 }} />
-          <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+          {/* Headline path: one click → Google Images for the current name → copy URL → paste below */}
+          <a
+            href={`https://www.google.com/search?tbm=isch&q=${encodeURIComponent(draft.name || 'product')}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              padding: '10px 14px', borderRadius: 8, marginBottom: 8,
+              background: `linear-gradient(135deg, ${kit.primary}25, ${kit.secondary}20)`,
+              border: `1px solid ${kit.primary}50`,
+              color: 'white', textDecoration: 'none', fontWeight: 700, fontSize: 13,
+            }}
+          >
+            <span>🔍 Find a real photo on Google Images</span>
+            <span style={{ fontSize: 10, opacity: 0.8 }}>opens new tab ↗</span>
+          </a>
+          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 8, lineHeight: 1.5 }}>
+            On the new tab, right-click the photo you want → <strong style={{ color: 'white' }}>Copy Image Address</strong> → paste below.
+          </div>
+          <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
             <input
               value={urlValue}
               onChange={e => setUrlValue(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), onImageFromUrl())}
-              placeholder="…or paste an image URL"
+              placeholder="Paste image URL here…"
               style={{ ...inputStyle, marginBottom: 0 }}
             />
             <button onClick={onImageFromUrl} disabled={urlLoading || !urlValue.trim()}
-              style={{ padding: '0 14px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(255,255,255,0.04)', color: 'white', fontSize: 12, fontWeight: 600, cursor: urlLoading ? 'wait' : 'pointer', whiteSpace: 'nowrap' }}>
+              style={{ padding: '0 14px', borderRadius: 8, border: 'none', background: urlValue.trim() && !urlLoading ? `linear-gradient(135deg, ${kit.primary}, ${kit.secondary})` : 'rgba(255,255,255,0.06)', color: 'white', fontSize: 12, fontWeight: 700, cursor: urlLoading ? 'wait' : 'pointer', whiteSpace: 'nowrap' }}>
               {urlLoading ? '⏳' : 'Fetch'}
             </button>
           </div>
-          {draft.image && <img src={draft.image} alt="preview" style={{ marginTop: 8, maxWidth: 120, maxHeight: 120, borderRadius: 6, background: '#0b1220', objectFit: 'contain' }} />}
+          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 6 }}>Or upload from your computer:</div>
+          <input type="file" accept="image/*" onChange={e => e.target.files?.[0] && onImage(e.target.files[0])} style={{ ...inputStyle, padding: 8 }} />
+          {draft.image && (
+            <div style={{ marginTop: 10, display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+              <img src={draft.image} alt="preview" style={{ width: 100, height: 100, borderRadius: 6, background: '#0b1220', objectFit: 'contain' }} />
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', alignSelf: 'center' }}>
+                Current image. Replace anytime by uploading or pasting a URL above.
+              </div>
+            </div>
+          )}
         </Field>
 
         <div style={{ display: 'flex', gap: 8, marginTop: 18 }}>

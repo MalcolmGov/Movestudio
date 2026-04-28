@@ -9,8 +9,10 @@
 
 import { BrandKit } from '../types'
 import {
-  AdSpecial, Product, calcDiscount, formatPrice, formatValidity,
+  AdSpecial, Product, calcDiscount, formatPrice,
 } from '../utils/adSpecialEngine'
+import { Lang } from '../data/translations'
+import { t, formatValidityI18n, badgeTextI18n } from '../utils/i18n'
 
 interface Props {
   kit: BrandKit & { brandName?: string }
@@ -33,7 +35,7 @@ export default function AdSpecialCanvas({ kit, special, products, displayWidth =
   // stays balanced even when fewer than 4 products are picked.
   const slots: (Product | null)[] = Array.from({ length: 4 }, (_, i) => products[i] ?? null)
 
-  const validity = formatValidity(special.validFrom, special.validTo)
+  const validity = formatValidityI18n(special.validFrom, special.validTo, special.language)
   const qrSrc = special.store.qrUrl
     ? `https://api.qrserver.com/v1/create-qr-code/?size=180x180&margin=4&data=${encodeURIComponent(special.store.qrUrl)}`
     : null
@@ -89,7 +91,7 @@ export default function AdSpecialCanvas({ kit, special, products, displayWidth =
             lineHeight: 1.0,
             textTransform: 'uppercase',
           }}>
-            {special.title || 'Specials'}
+            {special.title || t('specialsHeadline', special.language)}
           </div>
           {special.subtitle && (
             <div style={{
@@ -113,7 +115,7 @@ export default function AdSpecialCanvas({ kit, special, products, displayWidth =
         gap: pad,
       }}>
         {slots.map((p, idx) => (
-          <ProductCell key={p?.id ?? `empty-${idx}`} product={p} kit={kit} currency={special.currency} W={W} pad={pad} />
+          <ProductCell key={p?.id ?? `empty-${idx}`} product={p} kit={kit} currency={special.currency} language={special.language} W={W} pad={pad} />
         ))}
       </div>
 
@@ -132,7 +134,7 @@ export default function AdSpecialCanvas({ kit, special, products, displayWidth =
       }}>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: Math.round(W * 0.034), fontWeight: 800, letterSpacing: '-0.01em', marginBottom: Math.round(pad * 0.25) }}>
-            Visit us today
+            {t('visitUsToday', special.language)}
           </div>
           <FooterRow icon="📍" text={special.store.address || '—'} W={W} />
           {special.store.phone   && <FooterRow icon="☎️" text={special.store.phone}    W={W} />}
@@ -147,7 +149,7 @@ export default function AdSpecialCanvas({ kit, special, products, displayWidth =
         {qrSrc && (
           <div style={{ flexShrink: 0, padding: 6, borderRadius: 6, background: 'white', alignSelf: 'center' }}>
             <img src={qrSrc} alt="QR" crossOrigin="anonymous" style={{ display: 'block', width: Math.round(W * 0.18), height: Math.round(W * 0.18) }} />
-            <div style={{ textAlign: 'center', fontSize: Math.round(W * 0.016), color: '#0b1220', fontWeight: 700, marginTop: 2 }}>SCAN ME</div>
+            <div style={{ textAlign: 'center', fontSize: Math.round(W * 0.016), color: '#0b1220', fontWeight: 700, marginTop: 2 }}>{t('scanMe', special.language)}</div>
           </div>
         )}
       </div>
@@ -157,10 +159,11 @@ export default function AdSpecialCanvas({ kit, special, products, displayWidth =
 
 // ── Product cell ──────────────────────────────────────────
 
-function ProductCell({ product, kit, currency, W, pad }: {
+function ProductCell({ product, kit, currency, language, W, pad }: {
   product: Product | null
   kit: BrandKit
   currency: AdSpecial['currency']
+  language: Lang
   W: number
   pad: number
 }) {
@@ -174,7 +177,7 @@ function ProductCell({ product, kit, currency, W, pad }: {
         fontSize: Math.round(W * 0.022), color: '#94a3b8', fontWeight: 600,
         textAlign: 'center', padding: pad * 0.5,
       }}>
-        Add a product
+        {t('addProductPlaceholder', language)}
       </div>
     )
   }
@@ -218,7 +221,7 @@ function ProductCell({ product, kit, currency, W, pad }: {
             boxShadow: `0 4px 10px ${kit.accent}55`,
             transform: 'rotate(8deg)',
           }}>
-            {d.badgeText(currency)}
+            {badgeTextI18n(d.percentOff, d.amountOff, currency, language)}
           </div>
         )}
       </div>

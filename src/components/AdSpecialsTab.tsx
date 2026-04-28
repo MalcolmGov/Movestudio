@@ -21,6 +21,10 @@ import { emojiToDataUrl } from '../utils/emojiToDataUrl'
 import { PRESET_CATEGORIES, PresetProduct } from '../data/presetProducts'
 import { searchProducts, imageUrlToDataUrl, OffProduct } from '../utils/productSearch'
 import AdSpecialCanvas from './AdSpecialCanvas'
+import { PaydayCalendar } from './PaydayCalendar'
+import WhatsAppShareButton from './WhatsAppShareButton'
+import { Lang } from '../data/translations'
+import { LANG_META } from '../utils/i18n'
 
 interface Props {
   kit: BrandKit & { brandName?: string }
@@ -54,12 +58,14 @@ export default function AdSpecialsTab({ kit, project }: Props) {
       {view === 'list' && (
         <ListView
           kit={kit}
+          projectId={projectId}
           specials={specials}
           products={products}
           onNew={startNew}
           onEdit={editExisting}
           onDelete={(id) => { AdSpecialsStore.remove(projectId, id); setTick(t => t + 1) }}
           onLibrary={() => setView('library')}
+          onUseTemplate={(special) => { AdSpecialsStore.upsert(projectId, special); setEditingId(special.id); setView('editor'); setTick(t => t + 1) }}
         />
       )}
       {view === 'library' && (
@@ -88,14 +94,16 @@ export default function AdSpecialsTab({ kit, project }: Props) {
 // LIST VIEW
 // ──────────────────────────────────────────────────────────
 
-function ListView({ kit, specials, products, onNew, onEdit, onDelete, onLibrary }: {
+function ListView({ kit, projectId, specials, products, onNew, onEdit, onDelete, onLibrary, onUseTemplate }: {
   kit: BrandKit
+  projectId: string
   specials: AdSpecial[]
   products: Product[]
   onNew: () => void
   onEdit: (id: string) => void
   onDelete: (id: string) => void
   onLibrary: () => void
+  onUseTemplate: (special: AdSpecial) => void
 }) {
   return (
     <div>
@@ -117,6 +125,8 @@ function ListView({ kit, specials, products, onNew, onEdit, onDelete, onLibrary 
           </motion.button>
         </div>
       </div>
+
+      <PaydayCalendar kit={kit} projectId={projectId} onUseTemplate={onUseTemplate} />
 
       {specials.length === 0 ? (
         <div style={{ padding: '56px 24px', borderRadius: 14, border: '1px dashed rgba(255,255,255,0.1)', textAlign: 'center', color: 'var(--text-muted)' }}>
@@ -675,6 +685,12 @@ function EditorView({ kit, projectId, specialId, onExit, onOpenLibrary }: {
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
           <button onClick={persist} style={{ padding: '9px 14px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(255,255,255,0.04)', color: 'white', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>Save</button>
+          <WhatsAppShareButton
+            canvasElementId="ad-special-canvas-root"
+            brandColor={kit.primary}
+            filenameBase={`movestudio-${(draft.title || 'special').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}`}
+            posterSummary={`${draft.title || 'Specials'} at ${draft.store.storeName || kit.companyName || kit.brandName || 'our store'}`}
+          />
           <button onClick={exportPng} disabled={!!exporting} style={{ padding: '9px 14px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(255,255,255,0.04)', color: 'white', fontWeight: 600, fontSize: 13, cursor: 'pointer', opacity: exporting === 'png' ? 0.6 : 1 }}>
             {exporting === 'png' ? '⏳ PNG…' : '🖼 Export PNG'}
           </button>
@@ -694,11 +710,18 @@ function EditorView({ kit, projectId, specialId, onExit, onOpenLibrary }: {
               <Field label="Valid from"><input type="date" value={draft.validFrom} onChange={e => update('validFrom', e.target.value)} style={inputStyle} /></Field>
               <Field label="Valid to"><input type="date" value={draft.validTo} onChange={e => update('validTo', e.target.value)} style={inputStyle} /></Field>
             </div>
-            <Field label="Currency">
-              <select value={draft.currency} onChange={e => update('currency', e.target.value as CurrencyCode)} style={inputStyle}>
-                {(Object.keys(CURRENCY_META) as CurrencyCode[]).map(c => <option key={c} value={c}>{c} ({CURRENCY_META[c].symbol})</option>)}
-              </select>
-            </Field>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+              <Field label="Currency">
+                <select value={draft.currency} onChange={e => update('currency', e.target.value as CurrencyCode)} style={inputStyle}>
+                  {(Object.keys(CURRENCY_META) as CurrencyCode[]).map(c => <option key={c} value={c}>{c} ({CURRENCY_META[c].symbol})</option>)}
+                </select>
+              </Field>
+              <Field label="Poster language">
+                <select value={draft.language} onChange={e => update('language', e.target.value as Lang)} style={inputStyle}>
+                  {LANG_META.map(l => <option key={l.code} value={l.code}>{l.flag} {l.nativeLabel}</option>)}
+                </select>
+              </Field>
+            </div>
           </Card>
 
           <Card title={`Products  ·  ${selected.length} / 4 selected`} action={<button onClick={onOpenLibrary} style={linkBtn(kit)}>+ Manage Library</button>}>

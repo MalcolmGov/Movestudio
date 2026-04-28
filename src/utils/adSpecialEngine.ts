@@ -1,3 +1,5 @@
+import { Lang } from '../data/translations'
+
 /**
  * adSpecialEngine.ts
  * Types, math, formatting, and per-project storage helpers for the Ad Specials feature.
@@ -42,6 +44,7 @@ export interface AdSpecial {
   layout: 'grid-4'          // v1: only 4-grid. Reserved for future layouts.
   store: AdSpecialStoreInfo
   disclaimer: string        // default "While stocks last. E&OE."
+  language: Lang            // poster language code: 'en' | 'zu' | 'xh' | 'af' | 'st'
   createdAt: string
   updatedAt: string
 }
@@ -153,6 +156,7 @@ export function newSpecial(): AdSpecial {
     layout: 'grid-4',
     store: {},
     disclaimer: 'While stocks last. E&OE. T&Cs apply.',
+    language: 'en',
     createdAt: now.toISOString(),
     updatedAt: now.toISOString(),
   }
